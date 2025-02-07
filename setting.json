@@ -1,7 +1,8 @@
 {
-    "max_like": 0,
-    "max_comments": 0,
-    "max_follow": 0,
+    "state": "home",
+    "max_likes": 11,
+    "max_comments": 11,
+    "max_follows": 12,
     "likes": 0,
     "comments": 0,
     "follows": 0

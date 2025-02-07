@@ -3,14 +3,25 @@ s_file = "setting.json"
 
 def default_settings():
     data = {
-        'max_like':0,
-        'max_comments':0,
-        'max_follow':0,
+        'state':"home",
+        'max_likes':60,
+        'max_comments':13,
+        'max_follows':12,
         'likes':0,
         'comments':0,
         'follows':0,
     }
     save_set(data)
+
+def change_data(data):
+    sets = settings()
+    sets['max_likes'] = data['max_likes']
+    sets['max_comments'] = data['max_comments']
+    sets['max_follow'] = data['max_follow']
+    save_set(sets)
+    
+def reset_sets():
+    default_settings()
 
 def settings():
     try:

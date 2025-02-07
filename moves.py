@@ -1,5 +1,5 @@
 import pyautogui
-import pyscreeze
+import pyperclip
 from time import sleep
 class drive:
     def __init__(self):
@@ -42,9 +42,11 @@ class drive:
     def r_clic(self):
         pyautogui.rightClick(self.left_l,self.down_l)
 
+    def center(self,path:str):
+        x, y = pyautogui.locateCenterOnScreen(path,confidence=0.8)
+        return x,y
 
     def click(self,path:str = ""):
-        print("path ",path)
         if path == "":
             pyautogui.click(self.left_l,self.down_l)
         else:
@@ -59,5 +61,6 @@ class drive:
         # pyautogui.hotkey(args)
     
     def type(self,args):
-        pyautogui.typewrite(args)
+        pyperclip.copy(args)
+        pyautogui.hotkey('ctrl', 'v')
     
