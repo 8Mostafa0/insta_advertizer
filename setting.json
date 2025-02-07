@@ -1,7 +1,9 @@
 {
     "state": "home",
-    "max_likes": 11,
-    "max_comments": 11,
+    "username": "mosielite",
+    "password": "@Mm09020407808",
+    "max_likes": 60,
+    "max_comments": 13,
     "max_follows": 12,
     "likes": 0,
     "comments": 0,

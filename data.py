@@ -4,6 +4,8 @@ s_file = "setting.json"
 def default_settings():
     data = {
         'state':"home",
+        'username':"",
+        'password':"",
         'max_likes':60,
         'max_comments':13,
         'max_follows':12,
