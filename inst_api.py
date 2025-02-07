@@ -11,8 +11,10 @@ global log_func
 sets = settings()
 
 insta_url = "https://www.instagram.com/"
-USERNAME = "b2rayng"
-PASSWORD = "@Mm09020407808"
+
+USERNAME = sets['username']
+PASSWORD = sets['password']
+
 d = drive()
 
 def start_adding(running,log):
