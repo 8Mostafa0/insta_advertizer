@@ -66,6 +66,10 @@ def create_browser():
             return;
         }
 
+        // Store the current search input value before removing the container
+        var existingSearchInput = document.getElementById('search-input');
+        var searchValue = existingSearchInput ? existingSearchInput.value : '';
+
         var existingContainer = document.getElementById('custom-buttons');
         if (existingContainer) {
             existingContainer.remove();
@@ -103,6 +107,7 @@ def create_browser():
         searchInput.style.marginBottom = '5px';
         searchInput.style.padding = '2px';
         searchInput.style.color = 'black';
+        searchInput.value = searchValue; // Restore the previous search value
         buttonContainer.appendChild(searchInput);
 
         var searchButton = document.createElement('button');
@@ -119,8 +124,14 @@ def create_browser():
                     var el = elements[i];
                     var textContent = el.textContent || '';
                     var href = el.getAttribute('href') || '';
+                    var id = el.id || '';
+                    var className = el.className || '';
+                    var ariaLabel = el.getAttribute('aria-label') || '';
                     if ((textContent.toLowerCase().includes(searchText.toLowerCase()) && el.children.length === 0) ||
-                        href.toLowerCase().includes(searchText.toLowerCase())) {
+                        href.toLowerCase().includes(searchText.toLowerCase()) ||
+                        id.toLowerCase().includes(searchText.toLowerCase()) ||
+                        className.toLowerCase().includes(searchText.toLowerCase()) ||
+                        ariaLabel.toLowerCase().includes(searchText.toLowerCase())) {
                         el.classList.add('highlight-search');
                     }
                 }
