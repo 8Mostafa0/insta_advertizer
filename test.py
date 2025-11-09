@@ -6,8 +6,9 @@ import sqlite3
 import random
 from datetime import datetime, timedelta
 import threading
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
@@ -39,7 +40,7 @@ HEADERS = {
     "Sec-Fetch-Site": "same-origin",
 }
 
-running = False
+running_event = threading.Event()  # Thread-safe flag
 session = requests.Session()
 session.headers.update(HEADERS)
 
@@ -51,6 +52,82 @@ retry_strategy = Retry(
 adapter = HTTPAdapter(max_retries=retry_strategy)
 session.mount("https://", adapter)
 
+# Customtkinter setup
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+# Settings dictionary with defaults
+settings = {
+    'username': 'b2rayng',
+    'password': '@Mm09020407808',
+    'session_id': '',
+    'max_follows': 5,
+    'max_likes': 20,
+    'max_comments': 10,
+    'max_unfollows': 5
+}
+
+def save_settings():
+    settings.update({
+        'username': username_var.get(),
+        'password': password_var.get(),
+        'session_id': sessionid_var.get(),
+        'max_follows': follows_var.get(),
+        'max_likes': likes_var.get(),
+        'max_comments': comments_var.get(),
+        'max_unfollows': unfollows_var.get()
+    })
+    with open('settings.json', 'w') as f:
+        json.dump(settings, f)
+
+def load_settings():
+    global settings
+    if os.path.exists('settings.json'):
+        with open('settings.json', 'r') as f:
+            settings.update(json.load(f))
+
+def increase_number(var, key):
+    var.set(var.get() + 1)
+    save_settings()
+
+def decrease_number(var, key):
+    if var.get() > 1:
+        var.set(var.get() - 1)
+        save_settings()
+
+def create_input_part(parent, label_text, var, key):
+    def set_var(*args):
+        save_settings()
+    frame = ctk.CTkFrame(parent)
+    frame.pack(pady=10, fill="both", expand=True)
+    label = ctk.CTkLabel(frame, text=label_text, font=("Arial", 16))
+    label.pack(side="top", pady=5)
+    entry_part = ctk.CTkEntry(frame, textvariable=var, width=200, justify="right")
+    entry_part.pack(side="left", expand=True)
+    var.trace_add("write", set_var)
+    return frame
+
+def create_control_frame(parent, label_text, var, key):
+    frame = ctk.CTkFrame(parent)
+    frame.pack(pady=10, fill="both", expand=True)
+    
+    label = ctk.CTkLabel(frame, text=label_text, font=("Arial", 16))
+    label.pack(side="top", pady=5)
+    
+    button_frame = ctk.CTkFrame(frame)
+    button_frame.pack(pady=5)
+    
+    decrease_button = ctk.CTkButton(button_frame, text="-", width=30, command=lambda: decrease_number(var, key))
+    decrease_button.pack(side="left", padx=20, ipadx=10)
+    
+    number_label = ctk.CTkLabel(button_frame, textvariable=var, font=("Arial", 16))
+    number_label.pack(side="left", padx=20, ipadx=10)
+    
+    increase_button = ctk.CTkButton(button_frame, text="+", width=30, command=lambda: increase_number(var, key))
+    increase_button.pack(side="left", padx=20, ipadx=10)
+    
+    return frame
+
 def setup_database():
     conn = sqlite3.connect('instagram_bot.db')
     c = conn.cursor()
@@ -58,6 +135,14 @@ def setup_database():
                  (username TEXT PRIMARY KEY, follow_time TEXT, followed_by_bot INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS action_log
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, action_type TEXT, timestamp TEXT)''')
+    conn.commit()
+    conn.close()
+
+    # New database for run logs
+    conn = sqlite3.connect('action_log.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS run_log
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, start_time TEXT)''')
     conn.commit()
     conn.close()
 
@@ -74,113 +159,52 @@ def generate_persian_comment():
         comment += " " + random.choice(emojis)
     return comment
 
-class InstagramBotGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Instagram Human-like Bot")
-        
-        self.username_var = tk.StringVar(value="b2rayng")
-        self.password_var = tk.StringVar(value="@Mm09020407808")
-        self.sessionid_var = tk.StringVar(value="")
-        self.follows_var = tk.IntVar(value=5)
-        self.likes_var = tk.IntVar(value=20)
-        self.comments_var = tk.IntVar(value=10)
-        self.unfollows_var = tk.IntVar(value=5)
-        
-        ttk.Label(root, text="Username:").grid(row=0, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.username_var).grid(row=0, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Password (optional if Session ID):").grid(row=1, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.password_var, show="*").grid(row=1, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Session ID (preferred):").grid(row=2, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.sessionid_var).grid(row=2, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Follows/hour:").grid(row=3, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.follows_var).grid(row=3, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Likes/hour:").grid(row=4, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.likes_var).grid(row=4, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Comments/hour:").grid(row=5, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.comments_var).grid(row=5, column=1, padx=5, pady=5)
-        
-        ttk.Label(root, text="Unfollows/hour:").grid(row=6, column=0, padx=5, pady=5)
-        ttk.Entry(root, textvariable=self.unfollows_var).grid(row=6, column=1, padx=5, pady=5)
-        
-        self.start_button = ttk.Button(root, text="Start", command=self.start_bot)
-        self.start_button.grid(row=7, column=0, padx=5, pady=5)
-        
-        self.stop_button = ttk.Button(root, text="Stop", command=self.stop_bot, state="disabled")
-        self.stop_button.grid(row=7, column=1, padx=5, pady=5)
-        
-        self.post_button = ttk.Button(root, text="Post", command=self.repost_last_post)
-        self.post_button.grid(row=7, column=2, padx=5, pady=5)
-        
-        self.log_text = tk.Text(root, height=10, width=50)
-        self.log_text.grid(row=8, column=0, columnspan=3, padx=5, pady=5)
+# GUI Setup
+app = ctk.CTk()
+app.title("Insta Automation")
+app.geometry("800x700")
+app.iconbitmap('app.ico')  # Set the app icon (ensure app.ico exists in the directory)
 
-    def log(self, message):
-        self.log_text.insert(tk.END, f"{datetime.now()}: {message}\n")
-        self.log_text.see(tk.END)
+# Load settings before initializing variables
+load_settings()
 
-    def start_bot(self):
-        global running, USERNAME, PASSWORD
-        USERNAME = self.username_var.get()
-        PASSWORD = self.password_var.get()
-        session_id = self.sessionid_var.get()
-        if not USERNAME or (not PASSWORD and not session_id):
-            messagebox.showerror("Error", "Please enter username and either password or session ID")
-            return
-        running = True
-        self.start_button.config(state="disabled")
-        self.stop_button.config(state="normal")
-        threading.Thread(target=run_bot, args=(
-            self.follows_var.get(),
-            self.likes_var.get(),
-            self.comments_var.get(),
-            self.unfollows_var.get(),
-            self.log,
-            session_id
-        ), daemon=True).start()
+# Define variables after loading settings
+username_var = ctk.StringVar(value=settings['username'])
+password_var = ctk.StringVar(value=settings['password'])
+sessionid_var = ctk.StringVar(value=settings['session_id'])
+follows_var = ctk.IntVar(value=settings['max_follows'])
+likes_var = ctk.IntVar(value=settings['max_likes'])
+comments_var = ctk.IntVar(value=settings['max_comments'])
+unfollows_var = ctk.IntVar(value=settings['max_unfollows'])
 
-    def stop_bot(self):
-        global running
-        running = False
-        self.start_button.config(state="normal")
-        self.stop_button.config(state="disabled")
-        self.log("Bot stopped")
+# Left Frame
+left_frame = ctk.CTkFrame(app)
+left_frame.pack(side="left", padx=20, pady=20, fill="both", expand=True)
 
-    def repost_last_post(self):
-        threading.Thread(target=self._repost_last_post_thread, daemon=True).start()
+create_input_part(left_frame, "نام کاربری", username_var, "username")
+create_input_part(left_frame, "رمز", password_var, "password")
+create_input_part(left_frame, "شناسه جلسه", sessionid_var, "session_id")
+create_control_frame(left_frame, "تعداد فالو :", follows_var, 'max_follows')
+create_control_frame(left_frame, "تعداد لایک :", likes_var, 'max_likes')
+create_control_frame(left_frame, "تعداد کامنت :", comments_var, 'max_comments')
+create_control_frame(left_frame, "تعداد آنفالو :", unfollows_var, 'max_unfollows')
 
-    def _repost_last_post_thread(self):
-        global session
-        self.log("Fetching last post...")
-        last_post = get_last_post(session, USERNAME, self.log)
-        if not last_post:
-            self.log("Failed to fetch last post")
-            return
-        
-        media_url = last_post.get("media_url")
-        caption = last_post.get("caption", "")
-        thumbnail_url = last_post.get("thumbnail_url", media_url)
-        
-        self.log("Downloading media and thumbnail...")
-        media_path = download_file(media_url, "last_post_media")
-        thumbnail_path = download_file(thumbnail_url, "last_post_thumbnail")
-        
-        if not media_path or not thumbnail_path:
-            self.log("Failed to download media or thumbnail")
-            return
-        
-        self.log("Creating new post...")
-        success = create_post(session, media_path, caption, thumbnail_path, self.log)
-        if success:
-            self.log("Successfully reposted last post")
-        else:
-            self.log("Failed to create new post")
+# Right Frame for Logs
+logs_frame = ctk.CTkFrame(app)
+logs_frame.pack(side="right", padx=20, pady=20, fill="both", expand=True)
 
+def log_message(*args):
+    message = " ".join(map(str, args))
+    log_box.insert("end", f"{datetime.now()}: {message}\n")
+    log_box.see("end")
+
+start_stop_button = ctk.CTkButton(logs_frame, text="شروع", fg_color="green", width=30, command=lambda: start_stop_main_func())
+start_stop_button.pack(side="top", padx=20, pady=10, ipadx=10)
+
+log_box = ctk.CTkTextbox(logs_frame, width=300, height=200, wrap="word")
+log_box.pack(pady=10, padx=10, fill="both", expand=True)
+
+# Instagram Functions
 def get_csrf_token():
     try:
         response = session.get(BASE_URL, timeout=20)
@@ -201,8 +225,8 @@ def login(max_retries=3):
 
             session.headers.update({"X-CSRFToken": csrf_token})
             payload = {
-                "username": USERNAME,
-                "enc_password": f"#PWD_INSTAGRAM_BROWSER:0:{int(time.time())}:{PASSWORD}",
+                "username": username_var.get(),
+                "enc_password": f"#PWD_INSTAGRAM_BROWSER:0:{int(time.time())}:{password_var.get()}",
                 "optIntoOneTap": "false",
                 "queryParams": "{}",
             }
@@ -248,12 +272,39 @@ def load_session(session_id=None):
 
 def verify_login(session):
     try:
-        profile_url = f"{BASE_URL}/api/v1/users/web_profile_info/?username={USERNAME}"
+        profile_url = f"{BASE_URL}/api/v1/users/web_profile_info/?username={username_var.get()}"
         response = session.get(profile_url, headers={"X-IG-App-ID": "936619743392459"}, timeout=20)
         return response.status_code == 200
     except Exception:
         return False
-
+def get_user_id_graphql(session, username, log):
+    try:
+        url = "https://i.instagram.com/api/v1/users/lookup/"
+        payload = {
+            "q": username,
+            "signed_body": "SIGNATURE." + json.dumps({"q": username}),
+        }
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "X-CSRFToken": get_csrf_token(),
+            "X-IG-App-ID": "567067343352427",  # این یکی جدیده و کار می‌کنه!
+        }
+        
+        response = session.post(url, data=payload, headers=headers, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("user", {}).get("pk"):
+                user_id = data["user"]["pk"]
+                log(f"User ID found via mobile API: {username} → {user_id}")
+                return {"id": str(user_id), "is_private": data["user"].get("is_private", False)}
+        
+        log(f"Mobile lookup failed for {username}: {response.status_code}")
+        return None
+        
+    except Exception as e:
+        log(f"Error in mobile lookup: {e}")
+        return None
+    
 def get_user_profile_data(session, username, log=None):
     try:
         csrf_token = get_csrf_token()
@@ -264,6 +315,7 @@ def get_user_profile_data(session, username, log=None):
         
         session.headers.update({"User-Agent": random.choice(USER_AGENTS), "X-CSRFToken": csrf_token})
         profile_url = f"{BASE_URL}/api/v1/users/web_profile_info/?username={username}"
+        print(profile_url)
         headers = {"X-IG-App-ID": "936619743392459"}
         response = session.get(profile_url, headers=headers, timeout=20)
         
@@ -339,10 +391,9 @@ def comment_on_post(session, post_id, username, log):
     return False
 
 def unfollow_user(session, username, log):
-    user_data = get_user_profile_data(session, username, log)
+    user_data = get_user_id_graphql(session, username, log)
     if not user_data:
         return False
-    
     unfollow_url = f"{BASE_URL}/api/v1/friendships/destroy/{user_data['id']}/"
     response = session.post(unfollow_url, headers={"X-IG-App-ID": "936619743392459", "X-CSRFToken": get_csrf_token()}, timeout=20)
     
@@ -415,153 +466,81 @@ def get_action_counts_last_hour():
         "unfollow": counts.get("unfollow", 0)
     }
 
-def get_last_post(session, username, log):
-    try:
-        if not verify_login(session):
-            log("Session invalid, please re-login")
-            return None
-        
-        user_data = get_user_profile_data(session, username, log)
-        if not user_data:
-            return None
-        
-        user_id = user_data["id"]
-        url = f"{BASE_URL}/api/v1/feed/user/{user_id}/"
-        session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
-        response = session.get(url, headers={"X-IG-App-ID": "936619743392459"}, timeout=20)
-        
-        if response.status_code != 200:
-            log(f"Failed to fetch posts, HTTP status: {response.status_code}")
-            return None
-        
-        if "<!DOCTYPE html>" in response.text:
-            log("Received HTML instead of JSON for user posts")
-            return None
-        
-        data = response.json()
-        items = data.get("items", [])
-        if not items:
-            log("No posts found for this user")
-            return None
-        
-        last_post = items[0]
-        media_url = last_post["image_versions2"]["candidates"][0]["url"] if "image_versions2" in last_post else last_post.get("video_versions", [{}])[0].get("url")
-        if not media_url:
-            log("No media URL found in last post")
-            return None
-        
-        caption = last_post.get("caption", {}).get("text", "") if last_post.get("caption") else ""
-        thumbnail_url = last_post.get("image_versions2", {}).get("candidates", [{}])[0].get("url", media_url)
-        
-        log(f"Fetched last post: {media_url[:50]}...")
-        return {"media_url": media_url, "caption": caption, "thumbnail_url": thumbnail_url}
-    except Exception as e:
-        log(f"Error fetching last post: {str(e)}")
-        return None
-
-def download_file(url, filename_prefix):
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            ext = ".jpg" if "image" in response.headers.get("Content-Type", "") else ".mp4"
-            filename = f"{filename_prefix}{ext}"
-            with open(filename, "wb") as f:
-                f.write(response.content)
-            return filename
-        return None
-    except Exception:
-        return None
-
-def create_post(session, media_path, caption, thumbnail_path, log):
-    try:
-        # Refresh CSRF token
-        csrf_token = get_csrf_token()
-        if not csrf_token:
-            log("Failed to get CSRF token for post upload")
-            return False
-        
-        session.headers.update({"User-Agent": random.choice(USER_AGENTS), "X-CSRFToken": csrf_token})
-        upload_url = f"{BASE_URL}/api/v1/media/upload/"
-        with open(media_path, "rb") as f:
-            files = {"photo": (os.path.basename(media_path), f, "image/jpeg" if media_path.endswith(".jpg") else "video/mp4")}
-            response = session.post(upload_url, files=files, headers={"X-IG-App-ID": "936619743392459"}, timeout=20)
-            if response.status_code != 200:
-                log(f"Media upload failed, HTTP status: {response.status_code}, response: {response.text[:100]}")
-                return False
-            upload_id = response.json().get("upload_id")
-            if not upload_id:
-                log("No upload ID returned from media upload")
-                return False
-            log(f"Media uploaded, upload ID: {upload_id}")
-        
-        configure_url = f"{BASE_URL}/api/v1/media/configure/"
-        payload = {
-            "upload_id": upload_id,
-            "caption": caption,
-            "usertags": "[]",
-            "source_type": "4",
-        }
-        response = session.post(configure_url, data=payload, headers={"X-IG-App-ID": "936619743392459", "X-CSRFToken": csrf_token}, timeout=20)
-        if response.status_code != 200:
-            log(f"Post configuration failed, HTTP status: {response.status_code}, response: {response.text[:100]}")
-            return False
-        
-        log("Post configured successfully")
-        return True
-    except Exception as e:
-        log(f"Error creating post: {str(e)}")
-        return False
-
-def run_bot(follows_per_hour, likes_per_hour, comments_per_hour, unfollows_per_hour, log, session_id=None):
-    global session, running
+def check_last_run():
+    conn = sqlite3.connect('action_log.db')
+    c = conn.cursor()
+    c.execute("SELECT start_time FROM run_log ORDER BY start_time DESC LIMIT 1")
+    last_run = c.fetchone()
+    conn.close()
     
+    if last_run:
+        if last_run[0] != '':
+            last_run_time = datetime.fromisoformat(last_run[0])
+            if datetime.now() - last_run_time < timedelta(hours=1):
+                return False  # Don't run if less than an hour has passed
+        return True  # Run if no recent run or more than an hour has passed
+
+def log_run_start():
+    conn = sqlite3.connect('action_log.db')
+    c = conn.cursor()
+    timestamp = datetime.now().isoformat()
+    c.execute("INSERT INTO run_log (start_time) VALUES (?)", (timestamp,))
+    conn.commit()
+    conn.close()
+
+def run_bot():
+    global session
     setup_database()
-    logged_in_session = load_session(session_id)
+    
+    # if not check_last_run():
+    #     log_message("Bot has already run within the last hour. Waiting to prevent Instagram banning.")
+    #     running_event.clear()
+    #     start_stop_button.configure(text="شروع", fg_color="green")
+    #     return
+    
+    log_run_start()
+    
+    logged_in_session = load_session(sessionid_var.get())
     if logged_in_session and verify_login(logged_in_session):
-        log("Session loaded successfully")
+        log_message("Session loaded successfully")
     else:
-        log("Trying to login with credentials...")
+        log_message("Trying to login with credentials...")
         logged_in_session = login()
         if not logged_in_session:
-            log("Login failed after retries. Check credentials or use a valid session ID.")
+            log_message("Login failed after retries. Check credentials or use a valid session ID.")
             return
-        log("Login successful")
+        log_message("Login successful")
     
     session = logged_in_session
-    log("Bot started")
+    log_message("Bot started")
 
-    while running:
+    while running_event.is_set():
         try:
             if random.random() < 0.1:
-                check_messages(session, log)
+                check_messages(session, log_message)
                 time.sleep(random.uniform(5, 15))
 
             counts = get_action_counts_last_hour()
             posts = get_feed_data(session)
             if not posts:
-                log("No posts found in feed, waiting...")
-                time.sleep(60)
+                log_message("No posts found in feed, waiting...")
+                time.sleep(1)
                 continue
 
             action_weights = [
-                ("like", 0.4, counts["like"] < likes_per_hour),
-                ("comment", 0.25, counts["comment"] < comments_per_hour),
-                ("follow", 0.2, counts["follow"] < follows_per_hour),
-                ("unfollow", 0.15, counts["unfollow"] < unfollows_per_hour)
+                ("like", 0.4, counts["like"] < likes_var.get()),
+                ("comment", 0.25, counts["comment"] < comments_var.get()),
+                ("follow", 0.2, counts["follow"] < follows_var.get()),
+                ("unfollow", 0.15, counts["unfollow"] < unfollows_var.get())
             ]
             
             available_actions = [a for a, _, cond in action_weights if cond]
             if not available_actions:
-                log("All action limits reached, waiting...")
+                log_message("All action limits reached, waiting...")
                 time.sleep(300)
                 continue
 
-            action = random.choices(
-                [a for a, _, _ in action_weights],
-                weights=[w for _, w, c in action_weights if c],
-                k=1
-            )[0]
-
+            action = random.choice([a for a, _, c in action_weights if c])
             post = random.choice(posts)
             if "media" not in post:
                 continue
@@ -570,43 +549,62 @@ def run_bot(follows_per_hour, likes_per_hour, comments_per_hour, unfollows_per_h
             post_id = media["pk"] if "pk" in media else media["id"]
 
             if action == "like":
-                like_post(session, post_id, username, log)
+                like_post(session, post_id, username, log_message)
                 time.sleep(random.uniform(2, 8))
 
             elif action == "comment":
-                comment_on_post(session, post_id, username, log)
+                comment_on_post(session, post_id, username, log_message)
                 time.sleep(random.uniform(5, 15))
 
             elif action == "follow":
                 followers = get_followers(session, username)
                 if followers:
                     target = random.choice(followers)
-                    follow_user(session, target, log)
+                    follow_user(session, target, log_message)
                     time.sleep(random.uniform(10, 20))
 
             elif action == "unfollow":
                 conn = sqlite3.connect('instagram_bot.db')
                 c = conn.cursor()
-                c.execute("SELECT username FROM followed_users WHERE follow_time < ? AND followed_by_bot = 1 LIMIT 1",
-                         ((datetime.now() - timedelta(hours=48)).isoformat(),))
-                to_unfollow = c.fetchone()
+                check_time = datetime.now() - timedelta(hours=48)
+                c.execute(f"SELECT username FROM followed_users WHERE follow_time < '{check_time}' AND followed_by_bot = 1 LIMIT 1")
+                to_unfollow = c.fetchone()[0]
                 conn.close()
                 if to_unfollow:
-                    unfollow_user(session, to_unfollow[0], log)
+                    unfollow_user(session, to_unfollow, log_message)
                     time.sleep(random.uniform(15, 25))
 
             if random.random() < 0.2:
-                log("Taking a short human-like break")
+                log_message("Taking a short human-like break")
                 time.sleep(random.uniform(30, 120))
             elif random.random() < 0.05:
-                log("Taking a longer human-like break")
+                log_message("Taking a longer human-like break")
                 time.sleep(random.uniform(300, 600))
 
         except Exception as e:
-            log(f"Error: {str(e)}")
+            log_message(f"Error: {str(e)}")
             time.sleep(300)
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = InstagramBotGUI(root)
-    root.mainloop()
+def start_stop_main_func():
+    if running_event.is_set():
+        running_event.clear()
+        start_stop_button.configure(text="شروع", fg_color="green")
+        log_message("Bot stopped.")
+    else:
+        if not username_var.get() or (not password_var.get() and not sessionid_var.get()):
+            log_message("Error: Please enter username and either password or session ID")
+            return
+        running_event.set()
+        start_stop_button.configure(text="توقف", fg_color="red")
+        log_message("Bot starting...")
+        threading.Thread(target=run_bot, daemon=True).start()
+
+# Run app
+app.mainloop()
+
+# when i run it twice in one hour its print:
+# 2025-04-02 13:46:45.644256: Bot starting...
+# 2025-04-02 13:46:45.648255: Bot has already run within the last hour. Waiting to prevent Instagram banning.
+
+# i dont want this i want to for example if the follow value is 5 and bot followed 2 people its should follow 3 more people in this hour and dont more till the next hours come
+# and do this for all part like,comment,..
